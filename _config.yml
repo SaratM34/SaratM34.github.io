@@ -1,0 +1,31 @@
+# Permalinks
+permalink:      /:year-:month-:day/:title
+
+# Setup
+title:          Tale
+paginate:       5
+baseurl:        ""
+url:            "https://SaratM34.github.io"
+
+# Assets
+sass:
+  sass_dir:     _sass
+  style:        :compressed
+
+# Build settings
+markdown:       kramdown
+
+# About
+author:
+  name:         SaratM 
+  url:          http://SaratM34.github.io
+  email:        tracesarath@gmail.com
+
+# Custom vars
+version:        3.4.1
+github:
+  repo:         https://github.com/SaratM34
+
+# Gems
+gems:
+  - jekyll-paginate

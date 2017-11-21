@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Implementing Linear Regression 3 Ways from Scratch, Scikit-Learn Approach and Tensor-Flow Approach"
+title:  "Implementing Linear Regression 3 Ways"
 author: "Sarat"
 ---
 

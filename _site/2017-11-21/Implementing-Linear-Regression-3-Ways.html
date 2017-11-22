@@ -47,26 +47,71 @@
   <h1 class="post-title">Implementing Linear Regression 3 Ways</h1>
   <div class="post-line"></div>
 
-  <p>Tale is minimal <a href="https://jekyllrb.com/">Jekyll</a> theme curated for storytellers. It is designed and developed by <a href="https://github.com/chesterhow/">myself</a> for a friend who writes short stories.</p>
+  <p>Arthur Samuel described Machine Learning as: <strong>“the field of study that gives computers the ability to learn without being explicitly programmed.”</strong> Any machine learning problem can be classified into one of the following types: <strong>Supervised Learning,</strong> <strong>Unsupervised Learning</strong>. In the case of supervised learning given an input <strong>“X”</strong>, you already know what the output should look like i.e you will be provided with the corresponding output labels <strong>“y”</strong>. On contrary in Unsupervised Learning you will be given only input <strong>“X”</strong> and you do not know how output should look like.</p>
 
-<h2 id="tale-features">Tale features</h2>
-<ul>
-  <li>Compatible with GitHub Pages</li>
-  <li>Responsive design (looks just as good on mobile)</li>
-  <li>Syntax highlighting, with the help of Pygments</li>
-  <li>Markdown and HTML text formatting</li>
-  <li>Pagination of posts</li>
-</ul>
+<p>Further, Supervised Learning problem can be classified into <strong>Regression</strong> and <strong>Classification</strong>. If we are trying to predict continous valued output the problem is considered as Regression. If we are trying to predict discrete valued output the problem is considered as Classification.</p>
 
-<p>Head over to the <a href="/2017-03-16/example-content">Example Content</a> post for a showcase of Tale’s text formatting features.</p>
+<p>In this post I am going to implement an Univariate Linear Regression model in 3 ways: Scratch, Scikit-Learn, TensorFlow. I am calling it Univariate because the input has only one feature.</p>
 
-<h2 id="browser-support">Browser Support</h2>
-<p>Tale works on most if not all modern browsers, including Chrome, Safari and Firefox 👍🏼</p>
+<h3 id="implementing-from-scratch">Implementing from scratch</h3>
 
-<h2 id="download-or-contribute">Download or Contribute</h2>
-<p>Tale is publicly hosted on GitHub, so go ahead and download or fork it at the <a href="https://github.com/chesterhow/tale">GitHub repository</a>. If you spot any bugs or have any suggestions, feel free to create an issue or make a pull request.</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Importing Necessary Libraries</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span> <span class="c"># Scientific Computing Library</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="n">pd</span> <span class="c"># Data Manipulation and Analysis Library</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="n">plt</span> <span class="c"># Plotting Library</span>
 
-<p>Thanks for checking out Tale!</p>
+<span class="o">%</span><span class="n">matplotlib</span> <span class="n">inline</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s">"ex1data1.txt"</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+<span class="n">X_train</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">c_</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">X_train</span><span class="p">]</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">m</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="mf">0.01</span>
+<span class="n">alpha</span> <span class="o">=</span> <span class="mf">0.001</span>
+<span class="k">for</span> <span class="nb">iter</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">500</span><span class="p">):</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span><span class="n">W</span><span class="p">)</span>
+    <span class="n">cost</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">m</span><span class="p">))</span><span class="o">*</span><span class="p">((</span><span class="n">z</span><span class="o">-</span><span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">z</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span>
+    <span class="n">W</span> <span class="o">=</span> <span class="n">W</span> <span class="o">-</span> <span class="p">((</span><span class="n">alpha</span><span class="o">/</span><span class="p">(</span><span class="n">m</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">T</span><span class="p">))</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">z</span> <span class="o">-</span> <span class="n">y</span><span class="p">))</span>
+    <span class="k">if</span><span class="p">(</span><span class="nb">iter</span><span class="o">%</span><span class="mi">100</span><span class="o">==</span><span class="mi">0</span><span class="p">):</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">"cost: "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">cost</span><span class="p">))</span>
+        
+<span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">([</span><span class="n">X</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]],[</span><span class="n">y</span><span class="p">],</span><span class="n">s</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="s">'r'</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s">'x'</span><span class="p">,</span> <span class="n">linewidths</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span><span class="mi">24</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'Population of City in 10,000s'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'Profit in $10,000s'</span><span class="p">);</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span><span class="n">z</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span><span class="n">z</span><span class="p">)</span>
+
+    
+    
+
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cost: [[ 32.37838392]]
+cost: [[ 5.87654595]]
+cost: [[ 5.82698203]]
+cost: [[ 5.77917421]]
+cost: [[ 5.7330594]]
+
+
+
+
+
+[&lt;matplotlib.lines.Line2D at 0x1f2a9f185c0&gt;,
+ &lt;matplotlib.lines.Line2D at 0x1f2aa172ef0&gt;]
+</code></pre></div></div>
+
+<p><img src="numpy_files/numpy_5_2.png" alt="png" /></p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+</code></pre></div></div>
 
 
 </div>
@@ -86,7 +131,7 @@
 
     <footer>
       <span>
-        &copy; <time datetime="2017-11-21 15:24:14 -0600">2017</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+        &copy; <time datetime="2017-11-22 12:40:55 -0600">2017</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
       </span>
     </footer>
   </body>

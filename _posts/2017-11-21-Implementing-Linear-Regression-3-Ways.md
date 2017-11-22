@@ -53,11 +53,6 @@ plt.xlim(4,24)
 plt.xlabel('Population of City in 10,000s')
 plt.ylabel('Profit in $10,000s');
 plt.plot(X,z)
-plt.plot(X,z)
-
-    
-    
-
 ```
 
     cost: [[ 32.37838392]]
@@ -68,15 +63,7 @@ plt.plot(X,z)
     
 
 
-
-
-    [<matplotlib.lines.Line2D at 0x1f2a9f185c0>,
-     <matplotlib.lines.Line2D at 0x1f2aa172ef0>]
-
-
-
-
-![png](numpy_files/numpy_5_2.png)
+![](https://i.imgur.com/C202l4r.png)
 
 
 

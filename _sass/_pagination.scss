@@ -25,7 +25,12 @@
   .arrow {
     @include transition(all .3s ease-out);
     color: $default-color;
+	font-size: 20px;
     position: absolute;
+	
+	&:before{
+    content: "Next";
+	}
 
     &:hover,
     &:focus {
@@ -34,8 +39,11 @@
     }
   }
 
-  .left {
+  .left {	
     left: 0;
+	&:before{
+    content: "Prev";
+	}
   }
 
   .right {

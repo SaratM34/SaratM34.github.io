@@ -49,12 +49,282 @@
   <h1 class="post-title">Implementing Logistic Regression 3 Ways</h1>
   <div class="post-line"></div>
 
+  <h3 id="logistic-regression">Logistic Regression</h3>
+<p>In the previous post we have seen an Regression Algorithm called Linear Regression implemented in 3 ways. In this post I am going to talk about classification task and implement an algorithm called Logistic regression in 3 ways. Classification problems deal with discrete valued output. If there are two classes we call it binary classification problem and problems with more than two classes are called as multi class classification problems. In this post I am going to implement an binary classification problem that distinguishes Cats from Non-Cats.</p>
+
+<p><strong>General Architecture for building an Algorithm</strong></p>
+<ul>
+  <li>Initialize Parameters</li>
+  <li>Calculate Cost and Gradients</li>
+  <li>Update parameters using Optimization Algorithms(Gradient Descent)</li>
+</ul>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Importing necessasry libraries</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="kn">import</span> <span class="nn">h5py</span>
+<span class="kn">import</span> <span class="nn">scipy</span>
+<span class="kn">from</span> <span class="nn">PIL</span> <span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="kn">import</span> <span class="n">ndimage</span>
+
+<span class="o">%</span><span class="n">matplotlib</span> <span class="n">inline</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Loading train dataset</span>
+<span class="n">train_dataset</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="s">'datasets/train_catvnoncat.h5'</span><span class="p">,</span> <span class="s">"r"</span><span class="p">)</span>
+<span class="n">train_set_x_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">train_dataset</span><span class="p">[</span><span class="s">"train_set_x"</span><span class="p">][:])</span>
+<span class="n">train_set_y_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">train_dataset</span><span class="p">[</span><span class="s">"train_set_y"</span><span class="p">][:])</span>
+<span class="c"># Loading test dataset</span>
+<span class="n">test_dataset</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="s">'datasets/test_catvnoncat.h5'</span><span class="p">,</span> <span class="s">"r"</span><span class="p">)</span>
+<span class="n">test_set_x_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">test_dataset</span><span class="p">[</span><span class="s">"test_set_x"</span><span class="p">][:])</span>
+<span class="n">test_set_y_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">test_dataset</span><span class="p">[</span><span class="s">"test_set_y"</span><span class="p">][:])</span>
+<span class="n">train_Y</span> <span class="o">=</span> <span class="n">train_set_y_orig</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">train_set_y_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="c"># Reshaping into size (1, num of examples)</span>
+<span class="n">test_Y</span> <span class="o">=</span> <span class="n">test_set_y_orig</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">test_set_y_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">classes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">test_dataset</span><span class="p">[</span><span class="s">"list_classes"</span><span class="p">][:])</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">train_set_x_orig</span><span class="o">.</span><span class="n">shape</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(209, 64, 64, 3)
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">train_X</span> <span class="o">=</span> <span class="n">train_set_x_orig</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">train_set_x_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+<span class="n">test_X</span> <span class="o">=</span> <span class="n">test_set_x_orig</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">test_set_x_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+<span class="c">#Preprocessing (Standardizing data)</span>
+<span class="n">train_X</span> <span class="o">=</span> <span class="n">train_X</span><span class="o">/</span><span class="mf">255.</span>
+<span class="n">test_X</span> <span class="o">=</span> <span class="n">test_X</span><span class="o">/</span><span class="mf">255.</span>
+
+<span class="n">m</span> <span class="o">=</span> <span class="n">train_X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="n">num_feat</span> <span class="o">=</span> <span class="n">train_X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Initializing parameters</span>
+
+<span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_feat</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+<span class="n">b</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.005</span>
+
+<span class="k">def</span> <span class="nf">sigmoid</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="mi">1</span><span class="o">/</span><span class="p">(</span><span class="mi">1</span><span class="o">+</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">s</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Forward Propagation, Back Propagation, Gradient Descent steps</span>
+<span class="n">costs</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">iterations</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2000</span><span class="p">):</span>
+    <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">W</span><span class="o">.</span><span class="n">T</span><span class="p">,</span><span class="n">train_X</span><span class="p">)</span><span class="o">+</span><span class="n">b</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">sigmoid</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span>
+    <span class="n">cost</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="o">/</span><span class="n">m</span><span class="p">)</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="nb">sum</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">train_Y</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">A</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">+</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">((</span><span class="mi">1</span><span class="o">-</span><span class="n">train_Y</span><span class="p">),</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">A</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)))</span>
+    <span class="n">dw</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">m</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">train_X</span><span class="p">,</span> <span class="p">(</span><span class="n">A</span><span class="o">-</span><span class="n">train_Y</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+    <span class="n">db</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">m</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="nb">sum</span><span class="p">((</span><span class="n">A</span><span class="o">-</span><span class="n">train_Y</span><span class="p">))</span>
+    <span class="n">W</span> <span class="o">=</span> <span class="n">W</span> <span class="o">-</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">dw</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">b</span> <span class="o">-</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">db</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">i</span><span class="o">%</span><span class="mi">100</span><span class="o">==</span><span class="mi">0</span><span class="p">):</span>
+        <span class="n">iterations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="n">costs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cost</span><span class="p">)</span>
+        <span class="k">print</span><span class="p">(</span><span class="n">cost</span><span class="p">)</span>
+<span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span><span class="s">"W"</span><span class="p">:</span><span class="n">W</span><span class="p">,</span><span class="s">"b"</span><span class="p">:</span><span class="n">b</span><span class="p">}</span>
+
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>0.0528243277002
+0.0520045086156
+0.0512088639306
+0.0504363575963
+0.0496860114665
+0.0489569013262
+0.0482481532411
+0.0475589401991
+0.046888479016
+0.0462360274824
+0.0456008817297
+0.0449823737963
+0.044379869376
+0.0437927657338
+0.0432204897734
+0.0426624962455
+0.0421182660831
+0.041587304856
+0.0410691413315
+0.0405633261357
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Prediction Function</span>
+<span class="k">def</span> <span class="nf">pred</span><span class="p">(</span><span class="n">X</span><span class="p">):</span>
+    <span class="n">pred</span> <span class="o">=</span> <span class="n">sigmoid</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">W</span><span class="o">.</span><span class="n">T</span><span class="p">,</span><span class="n">X</span><span class="p">)</span><span class="o">+</span><span class="n">b</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+        <span class="k">if</span> <span class="n">pred</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="n">i</span><span class="p">]</span><span class="o">&gt;=</span><span class="mf">0.5</span><span class="p">:</span>
+            <span class="n">pred</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="n">i</span><span class="p">]</span><span class="o">=</span><span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">pred</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="n">i</span><span class="p">]</span><span class="o">=</span><span class="mi">0</span>
+    <span class="k">return</span> <span class="n">pred</span>
+<span class="k">print</span><span class="p">(</span><span class="s">"train accuracy: {} </span><span class="si">%</span><span class="s">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">100</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="nb">abs</span><span class="p">(</span><span class="n">pred</span><span class="p">(</span><span class="n">train_X</span><span class="p">)</span><span class="o">-</span><span class="n">train_Y</span><span class="p">))</span> <span class="o">*</span> <span class="mi">100</span><span class="p">))</span>
+<span class="k">print</span><span class="p">(</span><span class="s">"test accuracy: {} </span><span class="si">%</span><span class="s">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">100</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="nb">abs</span><span class="p">(</span><span class="n">pred</span><span class="p">(</span><span class="n">test_X</span><span class="p">)</span><span class="o">-</span><span class="n">test_Y</span><span class="p">))</span> <span class="o">*</span> <span class="mi">100</span><span class="p">))</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>train accuracy: 100.0 %
+test accuracy: 68.0 %
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Predicting using our Own Image</span>
+<span class="n">my_image</span> <span class="o">=</span> <span class="s">"download.jpg"</span>
+
+<span class="n">fname</span> <span class="o">=</span> <span class="s">"images/"</span><span class="o">+</span><span class="n">my_image</span>
+<span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ndimage</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">flatten</span><span class="o">=</span><span class="bp">False</span><span class="p">))</span>
+<span class="n">my_image</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">misc</span><span class="o">.</span><span class="n">imresize</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span><span class="mi">64</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">64</span><span class="o">*</span><span class="mi">64</span><span class="o">*</span><span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">T</span>
+<span class="n">my_predicted_image</span> <span class="o">=</span> <span class="n">pred</span><span class="p">(</span><span class="n">my_image</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="s">"y = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">my_predicted_image</span><span class="p">))</span> <span class="o">+</span> <span class="s">", your algorithm predicts a </span><span class="se">\"</span><span class="s">"</span> <span class="o">+</span> <span class="n">classes</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">my_predicted_image</span><span class="p">)),]</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">"utf-8"</span><span class="p">)</span> <span class="o">+</span>  <span class="s">"</span><span class="se">\"</span><span class="s"> picture."</span><span class="p">)</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>C:\Users\user\Anaconda3\lib\site-packages\ipykernel_launcher.py:8: RuntimeWarning: overflow encountered in exp
   
+
+
+y = 0.0, your algorithm predicts a "non-cat" picture.
+</code></pre></div></div>
+
+<p><img src="https://i.imgur.com/0Af5fvc.png" alt="" /></p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Plot learning curve (with costs)</span>
+<span class="c">#costs = np.squeeze(d['costs'])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">iterations</span><span class="p">,</span><span class="n">costs</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'cost'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'iterations'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">"Learning rate ="</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="mf">0.005</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</code></pre></div></div>
+
+<p><img src="https://i.imgur.com/MLdAWIJ.png" alt="" /></p>
+
+<h3 id="implementation-in-scikit-learn">Implementation in Scikit-Learn</h3>
+
+<p>Sklearn has an inbuilt estimators to implement Logistic Regression. It is part of sklearn.linear_model package. Pickle is sklearn library used for model persistence i.e the model can be saved and later used directly without training the model everytime when we want to predict on new data.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="nn">sklearn.linear_model</span> <span class="kn">import</span> <span class="n">LogisticRegression</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">clf</span> <span class="o">=</span> <span class="n">LogisticRegression</span><span class="p">()</span>
+<span class="n">clf</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">train_X</span><span class="o">.</span><span class="n">T</span><span class="p">,</span><span class="n">train_Y</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="c"># Sklearn expects shape of the input to be in shape(n_samples, n_features)</span>
+<span class="n">train_accuracy</span> <span class="o">=</span> <span class="n">clf</span><span class="o">.</span><span class="n">score</span><span class="p">(</span><span class="n">train_X</span><span class="o">.</span><span class="n">T</span><span class="p">,</span><span class="n">train_Y</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+<span class="n">test_accuracy</span> <span class="o">=</span> <span class="n">clf</span><span class="o">.</span><span class="n">score</span><span class="p">(</span><span class="n">test_X</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">test_Y</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="s">"Train_Accuracy: "</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">train_accuracy</span><span class="p">))</span>
+<span class="k">print</span><span class="p">(</span><span class="s">"Test_Accuracy: "</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">test_accuracy</span><span class="p">))</span>
+<span class="n">predict</span> <span class="o">=</span> <span class="n">clf</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_X</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="n">predict</span><span class="p">)</span>
+
+<span class="n">s</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">clf</span><span class="p">)</span>
+
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>C:\Users\user\Anaconda3\lib\site-packages\sklearn\utils\validation.py:526: DataConversionWarning: A column-vector y was passed when a 1d array was expected. Please change the shape of y to (n_samples, ), for example using ravel().
+  y = column_or_1d(y, warn=True)
+
+
+Train_Accuracy: 1.0
+Test_Accuracy: 0.72
+[1 1 1 1 1 0 0 1 1 1 0 0 1 1 0 1 0 1 0 0 1 0 0 1 0 1 1 0 0 1 0 1 1 1 0 0 0
+ 1 0 0 1 0 1 0 1 1 0 1 1 0]
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">print</span><span class="p">(</span><span class="n">test_Y</span><span class="p">)</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[[1 1 1 1 1 0 1 1 1 1 1 1 1 0 0 1 0 1 1 1 1 0 0 1 1 1 1 0 1 0 1 1 1 1 0 0 0
+  1 0 0 1 1 1 0 0 0 1 1 1 0]]
+</code></pre></div></div>
+
+<h3 id="implementation-in-tensorflow">Implementation in TensorFlow</h3>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="n">tf</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span>
+<span class="kn">import</span> <span class="nn">h5py</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Loading train dataset</span>
+<span class="n">train_dataset</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="s">'datasets/train_catvnoncat.h5'</span><span class="p">,</span> <span class="s">"r"</span><span class="p">)</span>
+<span class="n">train_set_x_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">train_dataset</span><span class="p">[</span><span class="s">"train_set_x"</span><span class="p">][:])</span>
+<span class="n">train_set_y_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">train_dataset</span><span class="p">[</span><span class="s">"train_set_y"</span><span class="p">][:])</span>
+<span class="c"># Loading test dataset</span>
+<span class="n">test_dataset</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="s">'datasets/test_catvnoncat.h5'</span><span class="p">,</span> <span class="s">"r"</span><span class="p">)</span>
+<span class="n">test_set_x_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">test_dataset</span><span class="p">[</span><span class="s">"test_set_x"</span><span class="p">][:])</span>
+<span class="n">test_set_y_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">test_dataset</span><span class="p">[</span><span class="s">"test_set_y"</span><span class="p">][:])</span>
+<span class="n">train_Y</span> <span class="o">=</span> <span class="n">train_set_y_orig</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">train_set_y_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="c"># Reshaping into size (1, num of examples)</span>
+<span class="n">test_Y</span> <span class="o">=</span> <span class="n">test_set_y_orig</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">test_set_y_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">classes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">test_dataset</span><span class="p">[</span><span class="s">"list_classes"</span><span class="p">][:])</span>
+<span class="n">train_set_x_orig</span><span class="o">.</span><span class="n">shape</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(209, 64, 64, 3)
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">train_X</span> <span class="o">=</span> <span class="n">train_set_x_orig</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">train_set_x_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+<span class="n">test_X</span> <span class="o">=</span> <span class="n">test_set_x_orig</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">test_set_x_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+<span class="c">#Preprocessing (Standardizing data)</span>
+<span class="n">train_X</span> <span class="o">=</span> <span class="n">train_X</span><span class="o">/</span><span class="mf">255.</span>
+<span class="n">test_X</span> <span class="o">=</span> <span class="n">test_X</span><span class="o">/</span><span class="mf">255.</span>
+
+<span class="n">X</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,[</span><span class="bp">None</span><span class="p">,</span><span class="mi">12288</span><span class="p">])</span>
+<span class="n">W</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">12288</span><span class="p">,</span><span class="mi">1</span><span class="p">]))</span>
+<span class="n">b</span> <span class="o">=</span> <span class="mi">0</span>
+
+
+<span class="n">Y</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">X</span><span class="p">,[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">12288</span><span class="p">]),</span><span class="n">W</span><span class="p">)</span><span class="o">+</span><span class="n">b</span><span class="p">)</span>
+<span class="n">Y_</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="bp">None</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span>
+
+<span class="n">is_correct</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">tf</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">Y_</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+<span class="n">accuracy</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">is_correct</span><span class="p">,</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">))</span>
+
+<span class="n">cost</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="o">-</span><span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">Y_</span><span class="o">*</span><span class="n">tf</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">Y</span><span class="p">),</span> <span class="n">reduction_indices</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+<span class="c">#cost = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Y, labels=Y_))</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">GradientDescentOptimizer</span><span class="p">(</span><span class="mf">0.005</span><span class="p">)</span><span class="o">.</span><span class="n">minimize</span><span class="p">(</span><span class="n">cost</span><span class="p">)</span>
+
+<span class="n">init</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">global_variables_initializer</span><span class="p">()</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">sess</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span>
+<span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">init</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2000</span><span class="p">):</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">cost</span><span class="p">],</span> <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="n">X</span><span class="p">:</span><span class="n">train_X</span><span class="o">.</span><span class="n">T</span><span class="p">,</span><span class="n">Y_</span><span class="p">:</span><span class="n">train_Y</span><span class="o">.</span><span class="n">T</span><span class="p">})</span>
+    
+    <span class="k">if</span> <span class="n">i</span><span class="o">%</span><span class="mi">500</span><span class="o">==</span><span class="mi">0</span><span class="p">:</span>
+        <span class="k">print</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+
+<span class="n">a</span><span class="p">,</span><span class="n">c</span> <span class="o">=</span> <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="n">accuracy</span><span class="p">,</span><span class="n">cost</span><span class="p">],</span> <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="n">X</span><span class="p">:</span><span class="n">train_X</span><span class="o">.</span><span class="n">T</span><span class="p">,</span><span class="n">Y_</span><span class="p">:</span><span class="n">train_Y</span><span class="o">.</span><span class="n">T</span><span class="p">})</span>
+<span class="n">te_a</span><span class="p">,</span><span class="n">te_c</span> <span class="o">=</span> <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="n">accuracy</span><span class="p">,</span><span class="n">cost</span><span class="p">],</span> <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="n">X</span><span class="p">:</span><span class="n">test_X</span><span class="o">.</span><span class="n">T</span><span class="p">,</span><span class="n">Y_</span><span class="p">:</span><span class="n">test_Y</span><span class="o">.</span><span class="n">T</span><span class="p">})</span>
+<span class="k">print</span><span class="p">(</span><span class="s">"Train_accuracy: "</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">a</span><span class="p">))</span>
+<span class="k">print</span><span class="p">(</span><span class="s">"Test_accuracy: "</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">te_a</span><span class="p">))</span>
+
+
+<span class="c">#pred = sess.run([Y],feed_dict={X:train_X.T[2:3]})</span>
+<span class="c">#print(pred)</span>
+
+
+            
+
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>0.238788
+0.000950269
+0.000563892
+0.000407643
+Train_accuracy: 1.0
+Test_accuracy: 1.0
+</code></pre></div></div>
+
 
 
 </div>
 
 <div class="pagination">
+  
+    <a href="/2017-12-02/Full-Convolutional-Model-using-TensorFlow" class="left arrow">&#8592;</a>
   
   
     <a href="/2017-11-21/Implementing-Linear-Regression-3-Ways" class="right arrow">&#8594;</a>
@@ -67,7 +337,7 @@
 
     <footer>
       <span>
-        &copy; <time datetime="2017-11-25 15:16:09 -0600">2017</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+        &copy; <time datetime="2017-12-02 08:30:02 -0600">2017</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
       </span>
     </footer>
   </body>

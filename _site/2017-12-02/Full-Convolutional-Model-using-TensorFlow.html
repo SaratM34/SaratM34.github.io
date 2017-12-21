@@ -42,14 +42,219 @@
 
     
       <br>
-      <span>on&nbsp;</span><time datetime="2017-12-02 00:00:00 -0600">December 02, 2017</time>
+      <span>on&nbsp;</span><time datetime="2017-12-02 00:00:00 +0530">December 02, 2017</time>
     
   </div>
 
   <h1 class="post-title">Full Convolutional Model using TensorFlow</h1>
   <div class="post-line"></div>
 
-  
+  <h2 id="introduction">Introduction</h2>
+
+<p>In this post I implemented a full convolutional model using tensorflow that uses SIGNS dataset which contains hand signs of digits 0 to 5. Initliased weights with xaviers initialisation. The optimizer used is Adam Optimizer.</p>
+
+<p><strong>Basic Architecture</strong></p>
+<ul>
+  <li>Initialize parameters</li>
+  <li>Forward Prop</li>
+  <li>Compute Cost</li>
+  <li>Back Prop done automatically by TensorFlow</li>
+  <li>Predict</li>
+</ul>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="n">tf</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span>
+<span class="kn">import</span> <span class="nn">h5py</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="kn">import</span> <span class="nn">scipy</span>
+<span class="kn">from</span> <span class="nn">PIL</span> <span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="kn">import</span> <span class="n">ndimage</span>
+<span class="kn">from</span> <span class="nn">tensorflow.python.framework</span> <span class="kn">import</span> <span class="n">ops</span>
+<span class="kn">from</span> <span class="nn">cnn_utils</span> <span class="kn">import</span> <span class="o">*</span>
+
+<span class="o">%</span><span class="n">matplotlib</span> <span class="n">inline</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Loading the data(signs)</span>
+<span class="n">X_train_orig</span><span class="p">,</span> <span class="n">Y_train_orig</span><span class="p">,</span> <span class="n">X_test_orig</span><span class="p">,</span> <span class="n">Y_test_orig</span><span class="p">,</span> <span class="n">classes</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">()</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">index</span> <span class="o">=</span> <span class="mi">14</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">X_train_orig</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"y = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">Y_train_orig</span><span class="p">[:,</span> <span class="n">index</span><span class="p">])))</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>y = 2
+</code></pre></div></div>
+
+<p><img src="https://i.imgur.com/o8vDHE0.png" alt="" /></p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">X_train</span> <span class="o">=</span> <span class="n">X_train_orig</span><span class="o">/</span><span class="mf">255.</span>
+<span class="n">X_test</span> <span class="o">=</span> <span class="n">X_test_orig</span><span class="o">/</span><span class="mf">255.</span>
+<span class="n">Y_train</span> <span class="o">=</span> <span class="n">convert_to_one_hot</span><span class="p">(</span><span class="n">Y_train_orig</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+<span class="n">Y_test</span> <span class="o">=</span> <span class="n">convert_to_one_hot</span><span class="p">(</span><span class="n">Y_test_orig</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+<span class="n">conv_layers</span> <span class="o">=</span> <span class="p">{}</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Create Placeholders for input to feed during running session</span>
+<span class="k">def</span>  <span class="nf">create_placeholders</span><span class="p">(</span><span class="n">n_H0</span><span class="p">,</span> <span class="n">n_W0</span><span class="p">,</span> <span class="n">n_C0</span><span class="p">,</span> <span class="n">n_y</span><span class="p">):</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="n">n_H0</span><span class="p">,</span><span class="n">n_W0</span><span class="p">,</span><span class="n">n_C0</span><span class="p">])</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="n">n_y</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">X</span><span class="p">,</span><span class="n">Y</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Initialising weights with xaviers initializer</span>
+<span class="k">def</span> <span class="nf">initialize_parameters</span><span class="p">():</span>
+    
+    <span class="n">tf</span><span class="o">.</span><span class="n">set_random_seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">W1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">get_variable</span><span class="p">(</span><span class="s">"W1"</span><span class="p">,</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">8</span><span class="p">],</span> <span class="n">initializer</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">contrib</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">xavier_initializer</span><span class="p">(</span><span class="n">seed</span> <span class="o">=</span> <span class="mi">0</span><span class="p">))</span>
+    <span class="n">W2</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">get_variable</span><span class="p">(</span><span class="s">"W2"</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mi">16</span><span class="p">],</span> <span class="n">initializer</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">contrib</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">xavier_initializer</span><span class="p">(</span><span class="n">seed</span> <span class="o">=</span> <span class="mi">0</span><span class="p">))</span>
+    
+    <span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span><span class="s">"W1"</span><span class="p">:</span><span class="n">W1</span><span class="p">,</span> <span class="s">"W2"</span><span class="p">:</span><span class="n">W2</span><span class="p">}</span>
+    
+    <span class="k">return</span> <span class="n">parameters</span>
+
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">forward_propagation</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">parameters</span><span class="p">):</span>
+    
+    <span class="n">W1</span> <span class="o">=</span> <span class="n">parameters</span><span class="p">[</span><span class="s">"W1"</span><span class="p">]</span>
+    <span class="n">W2</span> <span class="o">=</span> <span class="n">parameters</span><span class="p">[</span><span class="s">"W2"</span><span class="p">]</span>
+    
+    <span class="c"># Conv layer 1</span>
+    <span class="n">Z1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">conv2d</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">W1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">padding</span><span class="o">=</span><span class="s">'SAME'</span><span class="p">)</span>
+    <span class="n">A1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">Z1</span><span class="p">)</span>
+    <span class="n">P1</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">max_pool</span><span class="p">(</span><span class="n">A1</span><span class="p">,</span> <span class="n">ksize</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">strides</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">padding</span><span class="o">=</span><span class="s">'SAME'</span><span class="p">)</span>
+    
+    <span class="c"># Conv layer 2</span>
+    <span class="n">Z2</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">conv2d</span><span class="p">(</span><span class="n">P1</span><span class="p">,</span> <span class="n">W2</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">padding</span><span class="o">=</span><span class="s">'SAME'</span><span class="p">)</span> 
+    <span class="n">A2</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">Z2</span><span class="p">)</span>
+    <span class="n">P2</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">max_pool</span><span class="p">(</span><span class="n">A2</span><span class="p">,</span> <span class="n">ksize</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span><span class="n">strides</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span><span class="n">padding</span><span class="o">=</span><span class="s">'SAME'</span><span class="p">)</span>
+    
+    <span class="c"># FLATTEN</span>
+    <span class="n">P2</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">contrib</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">P2</span><span class="p">)</span>
+    
+    <span class="c"># Fully-Connected layer without Non-Linear Activation</span>
+    <span class="n">Z3</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">contrib</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">fully_connected</span><span class="p">(</span><span class="n">P2</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="n">activation_fn</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">Z3</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">compute_cost</span><span class="p">(</span><span class="n">Z3</span><span class="p">,</span> <span class="n">Y</span><span class="p">):</span>
+    <span class="n">cost</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">softmax_cross_entropy_with_logits</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">Z3</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">Y</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">cost</span>
+    
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">model</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">Y_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">Y_test</span><span class="p">,</span> <span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.009</span><span class="p">,</span>
+          <span class="n">num_epochs</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">minibatch_size</span> <span class="o">=</span> <span class="mi">64</span><span class="p">,</span> <span class="n">print_cost</span> <span class="o">=</span> <span class="bp">True</span><span class="p">):</span>
+
+    <span class="n">ops</span><span class="o">.</span><span class="n">reset_default_graph</span><span class="p">()</span>
+    <span class="n">tf</span><span class="o">.</span><span class="n">set_random_seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">seed</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="p">(</span><span class="n">m</span><span class="p">,</span><span class="n">n_H0</span><span class="p">,</span><span class="n">n_W0</span><span class="p">,</span><span class="n">n_C0</span><span class="p">)</span> <span class="o">=</span> <span class="n">X_train</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">n_y</span> <span class="o">=</span> <span class="n">Y_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">costs</span> <span class="o">=</span> <span class="p">[]</span>
+    
+    <span class="n">X</span><span class="p">,</span><span class="n">Y</span> <span class="o">=</span> <span class="n">create_placeholders</span><span class="p">(</span><span class="n">n_H0</span><span class="p">,</span><span class="n">n_W0</span><span class="p">,</span><span class="n">n_C0</span><span class="p">,</span><span class="n">n_y</span><span class="p">)</span>
+    <span class="n">parameters</span> <span class="o">=</span> <span class="n">initialize_parameters</span><span class="p">()</span>
+    <span class="n">Z3</span> <span class="o">=</span> <span class="n">forward_propagation</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+    <span class="n">cost</span> <span class="o">=</span> <span class="n">compute_cost</span><span class="p">(</span><span class="n">Z3</span><span class="p">,</span><span class="n">Y</span><span class="p">)</span>
+    
+    <span class="n">optimizer</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">AdamOptimizer</span><span class="p">(</span><span class="n">learning_rate</span><span class="p">)</span><span class="o">.</span><span class="n">minimize</span><span class="p">(</span><span class="n">cost</span><span class="p">)</span>
+    
+    <span class="n">init</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">global_variables_initializer</span><span class="p">()</span>
+    
+    <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span> <span class="k">as</span> <span class="n">sess</span><span class="p">:</span>
+        
+        <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">init</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_epochs</span><span class="p">):</span>
+            <span class="n">minibatch_cost</span> <span class="o">=</span> <span class="mf">0.</span>
+            <span class="n">num_minibatches</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">m</span> <span class="o">/</span> <span class="n">minibatch_size</span><span class="p">)</span> <span class="c"># number of minibatches of size minibatch_size in the train set</span>
+            <span class="n">seed</span> <span class="o">=</span> <span class="n">seed</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">minibatches</span> <span class="o">=</span> <span class="n">random_mini_batches</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">Y_train</span><span class="p">,</span> <span class="n">minibatch_size</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span>
+            
+            <span class="k">for</span> <span class="n">minibatch</span> <span class="ow">in</span> <span class="n">minibatches</span><span class="p">:</span>
+
+                <span class="c"># Select a minibatch</span>
+                <span class="p">(</span><span class="n">minibatch_X</span><span class="p">,</span> <span class="n">minibatch_Y</span><span class="p">)</span> <span class="o">=</span> <span class="n">minibatch</span>
+                <span class="c"># IMPORTANT: The line that runs the graph on a minibatch.</span>
+                <span class="c"># Run the session to execute the optimizer and the cost, the feedict should contain a minibatch for (X,Y).</span>
+                <span class="c">### START CODE HERE ### (1 line)</span>
+                <span class="n">_</span> <span class="p">,</span> <span class="n">temp_cost</span> <span class="o">=</span> <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">cost</span><span class="p">],</span><span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="n">X</span><span class="p">:</span><span class="n">minibatch_X</span><span class="p">,</span><span class="n">Y</span><span class="p">:</span><span class="n">minibatch_Y</span><span class="p">})</span>
+                <span class="c">### END CODE HERE ###</span>
+                
+                <span class="n">minibatch_cost</span> <span class="o">+=</span> <span class="n">temp_cost</span> <span class="o">/</span> <span class="n">num_minibatches</span>
+                
+
+            <span class="c"># Print the cost every epoch</span>
+            <span class="k">if</span> <span class="n">print_cost</span> <span class="o">==</span> <span class="bp">True</span> <span class="ow">and</span> <span class="n">epoch</span> <span class="o">%</span> <span class="mi">5</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">print</span> <span class="p">(</span><span class="s">"Cost after epoch </span><span class="si">%</span><span class="s">i: </span><span class="si">%</span><span class="s">f"</span> <span class="o">%</span> <span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">minibatch_cost</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">print_cost</span> <span class="o">==</span> <span class="bp">True</span> <span class="ow">and</span> <span class="n">epoch</span> <span class="o">%</span> <span class="mi">1</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">costs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">minibatch_cost</span><span class="p">)</span>
+                
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">costs</span><span class="p">))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'cost'</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'iterations (per tens)'</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">"Learning rate ="</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">learning_rate</span><span class="p">))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+        <span class="c"># Calculate the correct predictions</span>
+        <span class="n">predict_op</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">Z3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">correct_prediction</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">predict_op</span><span class="p">,</span> <span class="n">tf</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        
+        <span class="c"># Calculate accuracy on the test set</span>
+        <span class="n">accuracy</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">correct_prediction</span><span class="p">,</span> <span class="s">"float"</span><span class="p">))</span>
+        <span class="k">print</span><span class="p">(</span><span class="n">accuracy</span><span class="p">)</span>
+        <span class="n">train_accuracy</span> <span class="o">=</span> <span class="n">accuracy</span><span class="o">.</span><span class="nb">eval</span><span class="p">({</span><span class="n">X</span><span class="p">:</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">Y</span><span class="p">:</span> <span class="n">Y_train</span><span class="p">})</span>
+        <span class="n">test_accuracy</span> <span class="o">=</span> <span class="n">accuracy</span><span class="o">.</span><span class="nb">eval</span><span class="p">({</span><span class="n">X</span><span class="p">:</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">Y</span><span class="p">:</span> <span class="n">Y_test</span><span class="p">})</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">"Train Accuracy:"</span><span class="p">,</span> <span class="n">train_accuracy</span><span class="p">)</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">"Test Accuracy:"</span><span class="p">,</span> <span class="n">test_accuracy</span><span class="p">)</span>
+                
+        <span class="k">return</span> <span class="n">train_accuracy</span><span class="p">,</span> <span class="n">test_accuracy</span><span class="p">,</span> <span class="n">parameters</span>
+            
+            
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">parameters</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">Y_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">Y_test</span><span class="p">)</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Cost after epoch 0: 1.917920
+Cost after epoch 5: 1.532475
+Cost after epoch 10: 1.014804
+Cost after epoch 15: 0.885137
+Cost after epoch 20: 0.766963
+Cost after epoch 25: 0.651208
+Cost after epoch 30: 0.613356
+Cost after epoch 35: 0.605931
+Cost after epoch 40: 0.534713
+Cost after epoch 45: 0.551402
+Cost after epoch 50: 0.496976
+Cost after epoch 55: 0.454438
+Cost after epoch 60: 0.455496
+Cost after epoch 65: 0.458359
+Cost after epoch 70: 0.450040
+Cost after epoch 75: 0.410687
+Cost after epoch 80: 0.469005
+Cost after epoch 85: 0.389253
+Cost after epoch 90: 0.363808
+Cost after epoch 95: 0.376132
+</code></pre></div></div>
+
+<p><img src="https://i.imgur.com/fSWs8ep.png" alt="" /></p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Tensor("Mean_1:0", shape=(), dtype=float32)
+Train Accuracy: 0.868519
+Test Accuracy: 0.733333
+</code></pre></div></div>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>We only just need to perform forward propagation. Back Prop will be automatically carried out by the tensorflow. This a simple convolutional model that detects hand signs. The model achieved 86% train accuracy and 73% test accuracy. We can improve test set accuracy by tuning the hyperparameters.</p>
+
 
 
 </div>
@@ -67,7 +272,7 @@
 
     <footer>
       <span>
-        &copy; <time datetime="2017-12-02 08:30:02 -0600">2017</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+        &copy; <time datetime="2017-12-21 09:04:30 +0530">2017</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
       </span>
     </footer>
   </body>

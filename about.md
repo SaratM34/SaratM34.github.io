@@ -9,6 +9,8 @@ My name is **Sri Sai Sarat Chandra Varma Mudunuri**. I am currently pursuing my 
 
 ## Contact
 
-[Email Me](mailto:tracesarath@gmail.com)  
+[Email Me](mailto:saratm344@gmail.com): saratm344@gmail.com  
 
 [Github](https://github.com/SaratM34)
+
+[Linkedin](https://www.linkedin.com/in/saratm/)

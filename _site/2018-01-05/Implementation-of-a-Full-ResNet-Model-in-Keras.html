@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+
+  <title>
+    
+      Implementation of a Full ResNet Model in Keras &middot; Sarat M
+    
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+</head>
+
+
+  <body>
+    <nav class="nav">
+      <div class="nav-container">
+        <a href="/">
+          <h2 class="nav-title">Sarat M</h2>
+        </a>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/">Posts</a></li>
+		  <li><a href="/resume/">Resume</a></li>
+        </ul>
+    </div>
+  </nav>
+
+    <main>
+      <div class="post">
+  <div class="post-info">
+    <span>Written by</span>
+    
+        Sarat
+    
+
+    
+      <br>
+      <span>on&nbsp;</span><time datetime="2018-01-05 00:00:00 -0600">January 05, 2018</time>
+    
+  </div>
+
+  <h1 class="post-title">Implementation of a Full ResNet Model in Keras</h1>
+  <div class="post-line"></div>
+
+  <h1 id="residual-networks">Residual Networks</h1>
+
+<p>Deep residual networks took the deep learning world by storm when Microsoft Research released Deep Residual Learning for Image Recognition. These networks led to 1st-place winning entries in all five main tracks of the ImageNet and COCO 2015 competitions, which covered image classification, object detection, and semantic segmentation. The robustness of ResNets has since been proven by various visual recognition tasks and by non-visual tasks involving speech and language.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span>
+<span class="kn">from</span> <span class="nn">keras</span> <span class="kn">import</span> <span class="n">layers</span>
+<span class="kn">from</span> <span class="nn">keras.layers</span> <span class="kn">import</span> <span class="n">Input</span><span class="p">,</span> <span class="n">Add</span><span class="p">,</span> <span class="n">Dense</span><span class="p">,</span> <span class="n">Activation</span><span class="p">,</span> <span class="n">ZeroPadding2D</span><span class="p">,</span> <span class="n">BatchNormalization</span><span class="p">,</span> <span class="n">Flatten</span><span class="p">,</span> <span class="n">Conv2D</span><span class="p">,</span> <span class="n">AveragePooling2D</span><span class="p">,</span> <span class="n">MaxPooling2D</span><span class="p">,</span> <span class="n">GlobalMaxPooling2D</span>
+<span class="kn">from</span> <span class="nn">keras.models</span> <span class="kn">import</span> <span class="n">Model</span><span class="p">,</span> <span class="n">load_model</span>
+<span class="kn">from</span> <span class="nn">keras.preprocessing</span> <span class="kn">import</span> <span class="n">image</span>
+<span class="kn">from</span> <span class="nn">keras.utils</span> <span class="kn">import</span> <span class="n">layer_utils</span>
+<span class="kn">from</span> <span class="nn">keras.utils.data_utils</span> <span class="kn">import</span> <span class="n">get_file</span>
+<span class="kn">from</span> <span class="nn">keras.applications.imagenet_utils</span> <span class="kn">import</span> <span class="n">preprocess_input</span>
+<span class="kn">import</span> <span class="nn">pydot</span>
+<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">SVG</span>
+<span class="kn">from</span> <span class="nn">keras.utils.vis_utils</span> <span class="kn">import</span> <span class="n">model_to_dot</span>
+<span class="kn">from</span> <span class="nn">keras.utils</span> <span class="kn">import</span> <span class="n">plot_model</span>
+<span class="kn">from</span> <span class="nn">resnets_utils</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">keras.initializers</span> <span class="kn">import</span> <span class="n">glorot_uniform</span>
+<span class="kn">import</span> <span class="nn">scipy.misc</span>
+<span class="kn">from</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">import</span> <span class="n">imshow</span>
+<span class="n">get_ipython</span><span class="p">()</span><span class="o">.</span><span class="n">magic</span><span class="p">(</span><span class="s">'matplotlib inline'</span><span class="p">)</span>
+
+<span class="kn">import</span> <span class="nn">keras.backend</span> <span class="k">as</span> <span class="n">K</span>
+<span class="n">K</span><span class="o">.</span><span class="n">set_image_data_format</span><span class="p">(</span><span class="s">'channels_last'</span><span class="p">)</span>
+<span class="n">K</span><span class="o">.</span><span class="n">set_learning_phase</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div></div>
+
+<h2 id="the-problem-of-very-deep-neural-networks">The problem of very deep neural networks</h2>
+
+<p>Last week, you built your first convolutional neural network. In recent years, neural networks have become deeper, with state-of-the-art networks going from just a few layers (e.g., AlexNet) to over a hundred layers.</p>
+
+<p>The main benefit of a very deep network is that it can represent very complex functions. It can also learn features at many different levels of abstraction, from edges (at the lower layers) to very complex features (at the deeper layers). However, using a deeper network doesn’t always help. A huge barrier to training them is vanishing gradients: very deep networks often have a gradient signal that goes to zero quickly, thus making gradient descent unbearably slow. More specifically, during gradient descent, as you backprop from the final layer back to the first layer, you are multiplying by the weight matrix on each step, and thus the gradient can decrease exponentially quickly to zero (or, in rare cases, grow exponentially quickly and “explode” to take very large values).</p>
+
+<p>During training, you might therefore see the magnitude (or norm) of the gradient for the earlier layers descrease to zero very rapidly as training proceeds:</p>
+
+<h1 id="identity_block">identity_block</h1>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">filters</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="n">block</span><span class="p">):</span>
+    <span class="s">"""
+    Implementation of the identity block as defined in Figure 3
+    
+    Arguments:
+    X -- input tensor of shape (m, n_H_prev, n_W_prev, n_C_prev)
+    f -- integer, specifying the shape of the middle CONV's window for the main path
+    filters -- python list of integers, defining the number of filters in the CONV layers of the main path
+    stage -- integer, used to name the layers, depending on their position in the network
+    block -- string/character, used to name the layers, depending on their position in the network
+    
+    Returns:
+    X -- output of the identity block, tensor of shape (n_H, n_W, n_C)
+    """</span>
+    
+    <span class="c"># defining name basis</span>
+    <span class="n">conv_name_base</span> <span class="o">=</span> <span class="s">'res'</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span> <span class="o">+</span> <span class="n">block</span> <span class="o">+</span> <span class="s">'_branch'</span>
+    <span class="n">bn_name_base</span> <span class="o">=</span> <span class="s">'bn'</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span> <span class="o">+</span> <span class="n">block</span> <span class="o">+</span> <span class="s">'_branch'</span>
+    
+    <span class="c"># Retrieve Filters</span>
+    <span class="n">F1</span><span class="p">,</span> <span class="n">F2</span><span class="p">,</span> <span class="n">F3</span> <span class="o">=</span> <span class="n">filters</span>
+    
+    <span class="c"># Save the input value. You'll need this later to add back to the main path. </span>
+    <span class="n">X_shortcut</span> <span class="o">=</span> <span class="n">X</span>
+    
+    <span class="c"># First component of main path</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Conv2D</span><span class="p">(</span><span class="n">filters</span> <span class="o">=</span> <span class="n">F1</span><span class="p">,</span> <span class="n">kernel_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">strides</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">padding</span> <span class="o">=</span> <span class="s">'valid'</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">conv_name_base</span> <span class="o">+</span> <span class="s">'2a'</span><span class="p">,</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">BatchNormalization</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">bn_name_base</span> <span class="o">+</span> <span class="s">'2a'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Activation</span><span class="p">(</span><span class="s">'relu'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    
+    <span class="c">### START CODE HERE ###</span>
+    
+    <span class="c"># Second component of main path (≈3 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Conv2D</span><span class="p">(</span><span class="n">filters</span> <span class="o">=</span> <span class="n">F2</span><span class="p">,</span> <span class="n">kernel_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">f</span><span class="p">),</span> <span class="n">strides</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">padding</span> <span class="o">=</span> <span class="s">'same'</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">conv_name_base</span> <span class="o">+</span> <span class="s">'2b'</span><span class="p">,</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">BatchNormalization</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">bn_name_base</span> <span class="o">+</span> <span class="s">'2b'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Activation</span><span class="p">(</span><span class="s">'relu'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+
+    <span class="c"># Third component of main path (≈2 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Conv2D</span><span class="p">(</span><span class="n">filters</span> <span class="o">=</span> <span class="n">F3</span><span class="p">,</span> <span class="n">kernel_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">strides</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">padding</span> <span class="o">=</span> <span class="s">'valid'</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">conv_name_base</span> <span class="o">+</span> <span class="s">'2c'</span><span class="p">,</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">BatchNormalization</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">bn_name_base</span> <span class="o">+</span> <span class="s">'2c'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+
+    <span class="c"># Final step: Add shortcut value to main path, and pass it through a RELU activation (≈2 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">layers</span><span class="o">.</span><span class="n">Add</span><span class="p">()([</span><span class="n">X</span><span class="p">,</span> <span class="n">X_shortcut</span><span class="p">])</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Activation</span><span class="p">(</span><span class="s">'relu'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    
+    <span class="c">### END CODE HERE ###</span>
+    
+    <span class="k">return</span> <span class="n">X</span>
+
+<span class="n">tf</span><span class="o">.</span><span class="n">reset_default_graph</span><span class="p">()</span>
+
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span> <span class="k">as</span> <span class="n">test</span><span class="p">:</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">A_prev</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="s">"float"</span><span class="p">,</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">])</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">A_prev</span><span class="p">,</span> <span class="n">f</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">filters</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span> <span class="n">stage</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">block</span> <span class="o">=</span> <span class="s">'a'</span><span class="p">)</span>
+    <span class="n">test</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">global_variables_initializer</span><span class="p">())</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="n">A</span><span class="p">],</span> <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="n">A_prev</span><span class="p">:</span> <span class="n">X</span><span class="p">,</span> <span class="n">K</span><span class="o">.</span><span class="n">learning_phase</span><span class="p">():</span> <span class="mi">0</span><span class="p">})</span>
+    <span class="k">print</span><span class="p">(</span><span class="s">"out = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]))</span>
+
+
+<span class="c"># convolutional_block</span>
+
+<span class="k">def</span> <span class="nf">convolutional_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">filters</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">2</span><span class="p">):</span>
+    <span class="s">"""
+    Implementation of the convolutional block as defined in Figure 4
+    
+    Arguments:
+    X -- input tensor of shape (m, n_H_prev, n_W_prev, n_C_prev)
+    f -- integer, specifying the shape of the middle CONV's window for the main path
+    filters -- python list of integers, defining the number of filters in the CONV layers of the main path
+    stage -- integer, used to name the layers, depending on their position in the network
+    block -- string/character, used to name the layers, depending on their position in the network
+    s -- Integer, specifying the stride to be used
+    
+    Returns:
+    X -- output of the convolutional block, tensor of shape (n_H, n_W, n_C)
+    """</span>
+    
+    <span class="c"># defining name basis</span>
+    <span class="n">conv_name_base</span> <span class="o">=</span> <span class="s">'res'</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span> <span class="o">+</span> <span class="n">block</span> <span class="o">+</span> <span class="s">'_branch'</span>
+    <span class="n">bn_name_base</span> <span class="o">=</span> <span class="s">'bn'</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span> <span class="o">+</span> <span class="n">block</span> <span class="o">+</span> <span class="s">'_branch'</span>
+    
+    <span class="c"># Retrieve Filters</span>
+    <span class="n">F1</span><span class="p">,</span> <span class="n">F2</span><span class="p">,</span> <span class="n">F3</span> <span class="o">=</span> <span class="n">filters</span>
+    
+    <span class="c"># Save the input value</span>
+    <span class="n">X_shortcut</span> <span class="o">=</span> <span class="n">X</span>
+
+
+    <span class="c">##### MAIN PATH #####</span>
+    <span class="c"># First component of main path </span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Conv2D</span><span class="p">(</span><span class="n">F1</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">strides</span> <span class="o">=</span> <span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="n">s</span><span class="p">),</span> <span class="n">padding</span> <span class="o">=</span> <span class="s">'valid'</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">conv_name_base</span> <span class="o">+</span> <span class="s">'2a'</span><span class="p">,</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">BatchNormalization</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">bn_name_base</span> <span class="o">+</span> <span class="s">'2a'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Activation</span><span class="p">(</span><span class="s">'relu'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    
+    <span class="c">### START CODE HERE ###</span>
+
+    <span class="c"># Second component of main path (≈3 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Conv2D</span><span class="p">(</span><span class="n">F2</span><span class="p">,</span> <span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">f</span><span class="p">),</span> <span class="n">strides</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">padding</span> <span class="o">=</span> <span class="s">'same'</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">conv_name_base</span> <span class="o">+</span> <span class="s">'2b'</span><span class="p">,</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">BatchNormalization</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">bn_name_base</span> <span class="o">+</span> <span class="s">'2b'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Activation</span><span class="p">(</span><span class="s">'relu'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+
+    <span class="c"># Third component of main path (≈2 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Conv2D</span><span class="p">(</span><span class="n">F3</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">strides</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">padding</span> <span class="o">=</span> <span class="s">'valid'</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">conv_name_base</span> <span class="o">+</span> <span class="s">'2c'</span><span class="p">,</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">BatchNormalization</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">bn_name_base</span> <span class="o">+</span> <span class="s">'2c'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+
+    <span class="c">##### SHORTCUT PATH #### (≈2 lines)</span>
+    <span class="n">X_shortcut</span> <span class="o">=</span> <span class="n">Conv2D</span><span class="p">(</span><span class="n">F3</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">strides</span> <span class="o">=</span> <span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="n">s</span><span class="p">),</span> <span class="n">padding</span> <span class="o">=</span> <span class="s">'valid'</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">conv_name_base</span> <span class="o">+</span> <span class="s">'1'</span><span class="p">,</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X_shortcut</span><span class="p">)</span>
+    <span class="n">X_shortcut</span> <span class="o">=</span> <span class="n">BatchNormalization</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">bn_name_base</span> <span class="o">+</span> <span class="s">'1'</span><span class="p">)(</span><span class="n">X_shortcut</span><span class="p">)</span>
+
+    <span class="c"># Final step: Add shortcut value to main path, and pass it through a RELU activation (≈2 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">layers</span><span class="o">.</span><span class="n">Add</span><span class="p">()([</span><span class="n">X</span><span class="p">,</span> <span class="n">X_shortcut</span><span class="p">])</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Activation</span><span class="p">(</span><span class="s">'relu'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    
+    <span class="c">### END CODE HERE ###</span>
+    
+    <span class="k">return</span> <span class="n">X</span>
+
+
+<span class="n">tf</span><span class="o">.</span><span class="n">reset_default_graph</span><span class="p">()</span>
+
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span> <span class="k">as</span> <span class="n">test</span><span class="p">:</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">A_prev</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="s">"float"</span><span class="p">,</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">])</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">convolutional_block</span><span class="p">(</span><span class="n">A_prev</span><span class="p">,</span> <span class="n">f</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">filters</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span> <span class="n">stage</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">block</span> <span class="o">=</span> <span class="s">'a'</span><span class="p">)</span>
+    <span class="n">test</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">global_variables_initializer</span><span class="p">())</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="n">A</span><span class="p">],</span> <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span><span class="n">A_prev</span><span class="p">:</span> <span class="n">X</span><span class="p">,</span> <span class="n">K</span><span class="o">.</span><span class="n">learning_phase</span><span class="p">():</span> <span class="mi">0</span><span class="p">})</span>
+    <span class="k">print</span><span class="p">(</span><span class="s">"out = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]))</span>
+
+
+<span class="c"># ResNet50</span>
+
+<span class="k">def</span> <span class="nf">ResNet50</span><span class="p">(</span><span class="n">input_shape</span> <span class="o">=</span> <span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">classes</span> <span class="o">=</span> <span class="mi">6</span><span class="p">):</span>
+    <span class="s">"""
+    Implementation of the popular ResNet50 the following architecture:
+    CONV2D -&gt; BATCHNORM -&gt; RELU -&gt; MAXPOOL -&gt; CONVBLOCK -&gt; IDBLOCK*2 -&gt; CONVBLOCK -&gt; IDBLOCK*3
+    -&gt; CONVBLOCK -&gt; IDBLOCK*5 -&gt; CONVBLOCK -&gt; IDBLOCK*2 -&gt; AVGPOOL -&gt; TOPLAYER
+
+    Arguments:
+    input_shape -- shape of the images of the dataset
+    classes -- integer, number of classes
+
+    Returns:
+    model -- a Model() instance in Keras
+    """</span>
+    
+    <span class="c"># Define the input as a tensor with shape input_shape</span>
+    <span class="n">X_input</span> <span class="o">=</span> <span class="n">Input</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span>
+
+    
+    <span class="c"># Zero-Padding</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">ZeroPadding2D</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))(</span><span class="n">X_input</span><span class="p">)</span>
+    
+    <span class="c"># Stage 1</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Conv2D</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <span class="n">strides</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">name</span> <span class="o">=</span> <span class="s">'conv1'</span><span class="p">,</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">BatchNormalization</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="s">'bn_conv1'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Activation</span><span class="p">(</span><span class="s">'relu'</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">MaxPooling2D</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">strides</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+
+    <span class="c"># Stage 2</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">convolutional_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">f</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">filters</span> <span class="o">=</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">256</span><span class="p">],</span> <span class="n">stage</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'a'</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">256</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'b'</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">256</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'c'</span><span class="p">)</span>
+
+    <span class="c">### START CODE HERE ###</span>
+
+    <span class="c"># Stage 3 (≈4 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">convolutional_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">f</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">filters</span> <span class="o">=</span> <span class="p">[</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">512</span><span class="p">],</span> <span class="n">stage</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'a'</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">512</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'b'</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">512</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'c'</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">512</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'d'</span><span class="p">)</span>
+
+    <span class="c"># Stage 4 (≈6 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">convolutional_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">f</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">filters</span> <span class="o">=</span> <span class="p">[</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">1024</span><span class="p">],</span> <span class="n">stage</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'a'</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">1024</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'b'</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">1024</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'c'</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">1024</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'d'</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">1024</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'e'</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">1024</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'f'</span><span class="p">)</span>
+
+    <span class="c"># Stage 5 (≈3 lines)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">convolutional_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">f</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">filters</span> <span class="o">=</span> <span class="p">[</span><span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">2048</span><span class="p">],</span> <span class="n">stage</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'a'</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">2048</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'b'</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">identity_block</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">2048</span><span class="p">],</span> <span class="n">stage</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="s">'c'</span><span class="p">)</span>
+
+    <span class="c"># AVGPOOL (≈1 line). Use "X = AveragePooling2D(...)(X)"</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">AveragePooling2D</span><span class="p">(</span><span class="n">pool_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">strides</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s">'valid'</span><span class="p">,</span> <span class="n">data_format</span><span class="o">=</span><span class="bp">None</span><span class="p">)(</span><span class="n">X</span><span class="p">)</span>
+    
+    <span class="c">### END CODE HERE ###</span>
+
+    <span class="c"># output layer</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Flatten</span><span class="p">()(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">Dense</span><span class="p">(</span><span class="n">classes</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s">'softmax'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s">'fc'</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">classes</span><span class="p">),</span> <span class="n">kernel_initializer</span> <span class="o">=</span> <span class="n">glorot_uniform</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">))(</span><span class="n">X</span><span class="p">)</span>
+    
+    
+    <span class="c"># Create model</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">inputs</span> <span class="o">=</span> <span class="n">X_input</span><span class="p">,</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">X</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s">'ResNet50'</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">model</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">ResNet50</span><span class="p">(</span><span class="n">input_shape</span> <span class="o">=</span> <span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">classes</span> <span class="o">=</span> <span class="mi">6</span><span class="p">)</span>
+
+
+<span class="n">model</span><span class="o">.</span><span class="nb">compile</span><span class="p">(</span><span class="n">optimizer</span><span class="o">=</span><span class="s">'adam'</span><span class="p">,</span> <span class="n">loss</span><span class="o">=</span><span class="s">'categorical_crossentropy'</span><span class="p">,</span> <span class="n">metrics</span><span class="o">=</span><span class="p">[</span><span class="s">'accuracy'</span><span class="p">])</span>
+
+<span class="n">X_train_orig</span><span class="p">,</span> <span class="n">Y_train_orig</span><span class="p">,</span> <span class="n">X_test_orig</span><span class="p">,</span> <span class="n">Y_test_orig</span><span class="p">,</span> <span class="n">classes</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">()</span>
+
+<span class="c"># Normalize image vectors</span>
+<span class="n">X_train</span> <span class="o">=</span> <span class="n">X_train_orig</span><span class="o">/</span><span class="mf">255.</span>
+<span class="n">X_test</span> <span class="o">=</span> <span class="n">X_test_orig</span><span class="o">/</span><span class="mf">255.</span>
+
+<span class="c"># Convert training and test labels to one hot matrices</span>
+<span class="n">Y_train</span> <span class="o">=</span> <span class="n">convert_to_one_hot</span><span class="p">(</span><span class="n">Y_train_orig</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+<span class="n">Y_test</span> <span class="o">=</span> <span class="n">convert_to_one_hot</span><span class="p">(</span><span class="n">Y_test_orig</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+<span class="k">print</span> <span class="p">(</span><span class="s">"number of training examples = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"number of test examples = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">X_test</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"X_train shape: "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"Y_train shape: "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">Y_train</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"X_test shape: "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">X_test</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"Y_test shape: "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">Y_test</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+
+
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">Y_train</span><span class="p">,</span> <span class="n">epochs</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">32</span><span class="p">)</span>
+
+
+<span class="n">preds</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">X_test</span><span class="p">,</span> <span class="n">Y_test</span><span class="p">)</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"Loss = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">preds</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"Test Accuracy = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">preds</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">load_model</span><span class="p">(</span><span class="s">'ResNet50.h5'</span><span class="p">)</span> 
+
+
+<span class="n">preds</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">X_test</span><span class="p">,</span> <span class="n">Y_test</span><span class="p">)</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"Loss = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">preds</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">"Test Accuracy = "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">preds</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+
+
+<span class="n">img_path</span> <span class="o">=</span> <span class="s">'images/my_image.jpg'</span>
+<span class="n">img</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">load_img</span><span class="p">(</span><span class="n">img_path</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">))</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">img_to_array</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">preprocess_input</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="s">'Input image shape:'</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">my_image</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">misc</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">img_path</span><span class="p">)</span>
+<span class="n">imshow</span><span class="p">(</span><span class="n">my_image</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="s">"class prediction vector [p(0), p(1), p(2), p(3), p(4), p(5)] = "</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+
+
+<span class="n">model</span><span class="o">.</span><span class="n">summary</span><span class="p">()</span>
+
+
+<span class="n">plot_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">to_file</span><span class="o">=</span><span class="s">'model.png'</span><span class="p">)</span>
+<span class="n">SVG</span><span class="p">(</span><span class="n">model_to_dot</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">prog</span><span class="o">=</span><span class="s">'dot'</span><span class="p">,</span> <span class="n">format</span><span class="o">=</span><span class="s">'svg'</span><span class="p">))</span>
+</code></pre></div></div>
+
+<h2 id="what-you-should-remember">What you should remember:</h2>
+
+<ul>
+  <li>Very deep “plain” networks don’t work in practice because they are hard to train due to vanishing gradients.</li>
+  <li>The skip-connections help to address the Vanishing Gradient problem. They also make it easy for a ResNet block to learn an identity function.</li>
+  <li>There are two main type of blocks: The identity block and the convolutional block.</li>
+  <li>Very deep Residual Networks are built by stacking these blocks together.</li>
+</ul>
+
+
+
+</div>
+
+<div class="pagination">
+  
+  
+    <a href="/2017-12-02/Full-Convolutional-Model-using-TensorFlow" class="right arrow">&#8594;</a>
+  
+
+  <a href="#" class="top">Top</a>
+</div>
+
+    </main>
+
+    <footer>
+      <span>
+        &copy; <time datetime="2018-01-19 09:12:50 -0600">2018</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+      </span>
+    </footer>
+  </body>
+</html>

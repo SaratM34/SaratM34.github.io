@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+
+  <title>
+    
+      Understanding LSTM Networks &middot; Sarat M
+    
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+</head>
+
+
+  <body>
+    <nav class="nav">
+      <div class="nav-container">
+        <a href="/">
+          <h2 class="nav-title">Sarat M</h2>
+        </a>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/">Posts</a></li>
+		  <li><a href="/resume/">Resume</a></li>
+        </ul>
+    </div>
+  </nav>
+
+    <main>
+      <div class="post">
+  <div class="post-info">
+    <span>Written by</span>
+    
+        Sarat
+    
+
+    
+      <br>
+      <span>on&nbsp;</span><time datetime="2018-03-30 00:00:00 -0500">March 30, 2018</time>
+    
+  </div>
+
+  <h1 class="post-title">Understanding LSTM Networks</h1>
+  <div class="post-line"></div>
+
+  <p>Traditional Neural Networks fails to generalize well for sequence data. Recurrent Neural Networks are a type of neural networks that have loop within them and works well with sequence data.</p>
+<div align="center">
+<img src="https://i.imgur.com/xH3VMry.png" alt="An unrolled RNN" />
+<strong>An unrolled RNN structure</strong>
+</div>
+<p><br /></p>
+
+<p>But the Recurrent Neural Networks works well for problems with short term dependencies. For example we want to predict the next word in the sentence “i drank apple <em>__</em>” RNNs work well in this context but fail to generalize the words in a sentence that has long term dependencies like “the cat, which already ate…<em>was</em> full” and “the cats, which already ate…<em>were</em> full”
+LSTM’s works really good for long term dependencies. In Standard RNN’s, the repeating module have very simple structure usually a single “tanh” layer whereas LSTM’s have four neural network layers interacting in a very special way. The key to LSTM’s is the memory cell state, horizontal line running on top of the diagram.</p>
+
+<div align="center">
+<img src="https://i.imgur.com/waWHYQE.png" alt="" />
+<strong>Single LSTM Unit</strong>
+</div>
+<p><br /></p>
+
+<p>LSTM’s have ability to add or remove information to the cell state, carefully regulated by structures called gates.</p>
+
+<div align="center">
+<img src="https://i.imgur.com/y9XGWsj.png" alt="" />
+<strong>Forget Gate</strong>
+</div>
+<p><br /></p>
+
+<p>The first sigmoid layer outputs numbers between 0 and 1, describing how much of each component should be let through. “0” means “let nothing through” and “1” mean “let everything through”.
+for example, if we would like to forget the gender of the old subject and update to new gender of another subject. The first sigmoid layer looks at “previous cell activation” and “input at the current time step” and outputs a value between 0 and 1.</p>
+
+<div align="center">
+<img src="https://i.imgur.com/59Br1vk.png" alt="" />
+<strong>Update Gate</strong>
+</div>
+<p><br /></p>
+
+<p>In order to update it involves two steps: first a sigmoid layer called input gate layer decides which values we will update and next “tanh” layer creates vector of candidate values that could be added to state. In next step, we will combine these two and create and update to the state.</p>
+
+<div align="center">
+ <img src="https://i.imgur.com/XAdGY9y.png" alt="" />
+ <strong>Output Gate</strong>
+ </div>
+<p><br /></p>
+
+<p>Next, we need to output. The output will be based on our cell state but filtered version. First we run a sigmoid layer that decides which parts of the cell state we are going to output. Then, we put the cell state through ‘tanh’ to push the cell state values between (-1,1) and multiply it by the output of the sigmoid gate, so that we only output the parts we decided to.</p>
+
+<p><strong>Variation of LSTM</strong></p>
+
+<div align="center">
+ <img src="https://i.imgur.com/ZLM5vBa.png" alt="" />
+ <strong>Output Gate</strong>
+ </div>
+<p><br /></p>
+
+<p>A simpler and powerful variation of LSTM is called GRU(Gated Recurrent Unit). It combines the forget gate and input gates into single “update gate”. It also merges cell state and hidden state, and make some other changes.</p>
+
+<p><strong>References:</strong></p>
+<ul>
+  <li>http://colah.github.io/posts/2015-08-Understanding-LSTMs/</li>
+</ul>
+
+
+</div>
+
+<div class="pagination">
+  
+  
+    <a href="/2018-01-05/Implementation-of-a-Full-ResNet-Model-in-Keras" class="right arrow">&#8594;</a>
+  
+
+  <a href="#" class="top">Top</a>
+</div>
+
+    </main>
+
+    <footer>
+      <span>
+        &copy; <time datetime="2018-03-30 19:38:27 -0500">2018</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+      </span>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+
+  <title>
+    
+      Object Detection - YOLO &middot; Sarat M
+    
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+</head>
+
+
+  <body>
+    <nav class="nav">
+      <div class="nav-container">
+        <a href="/">
+          <h2 class="nav-title">Sarat M</h2>
+        </a>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/">Posts</a></li>
+		  <li><a href="/resume/">Resume</a></li>
+        </ul>
+    </div>
+  </nav>
+
+    <main>
+      <div class="post">
+  <div class="post-info">
+    <span>Written by</span>
+    
+        Sarat
+    
+
+    
+      <br>
+      <span>on&nbsp;</span><time datetime="2018-04-01 00:00:00 -0500">April 01, 2018</time>
+    
+  </div>
+
+  <h1 class="post-title">Object Detection - YOLO</h1>
+  <div class="post-line"></div>
+
+  <p><strong>In this post you will learn to:</strong></p>
+<ul>
+  <li>Use Object Detection on car detection dataset</li>
+  <li>Deal with bounding boxes</li>
+</ul>
+
+<p>We need the following packages:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="kn">from</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">import</span> <span class="n">imshow</span>
+<span class="kn">import</span> <span class="nn">scipy.io</span>
+<span class="kn">import</span> <span class="nn">scipy.misc</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="n">pd</span>
+<span class="kn">import</span> <span class="nn">PIL</span>
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="n">tf</span>
+<span class="kn">from</span> <span class="nn">keras</span> <span class="kn">import</span> <span class="n">backend</span> <span class="k">as</span> <span class="n">K</span>
+<span class="kn">from</span> <span class="nn">keras.layers</span> <span class="kn">import</span> <span class="n">Input</span><span class="p">,</span> <span class="n">Lambda</span><span class="p">,</span> <span class="n">Conv2D</span>
+<span class="kn">from</span> <span class="nn">keras.models</span> <span class="kn">import</span> <span class="n">load_model</span><span class="p">,</span> <span class="n">Model</span>
+<span class="kn">from</span> <span class="nn">yolo_utils</span> <span class="kn">import</span> <span class="n">read_classes</span><span class="p">,</span> <span class="n">read_anchors</span><span class="p">,</span> <span class="n">generate_colors</span><span class="p">,</span> <span class="n">preprocess_image</span><span class="p">,</span> <span class="n">draw_boxes</span><span class="p">,</span> <span class="n">scale_boxes</span>
+<span class="kn">from</span> <span class="nn">yad2k.models.keras_yolo</span> <span class="kn">import</span> <span class="n">yolo_head</span><span class="p">,</span> <span class="n">yolo_boxes_to_corners</span><span class="p">,</span> <span class="n">preprocess_true_boxes</span><span class="p">,</span> <span class="n">yolo_loss</span><span class="p">,</span> <span class="n">yolo_body</span>
+
+<span class="o">%</span><span class="n">matplotlib</span> <span class="n">inline</span>
+</code></pre></div></div>
+<p>YOLO is very popular because it achieves high accuracy even if being able to run in real time. This algorithm “you only look once” at the image in the sense that it requires only one forward propagation to generate predictions. After non-max suppression, it then outputs recognized objects with bounding boxes around them.</p>
+
+<p>YOLO is computationally expensive to train. So we use pre-trained weights from a model that is trained on COCO dataset.</p>
+
+<h3>Model Details</h3>
+
+<p>First things to know:</p>
+<ul>
+  <li>The input is batch of images of shape (m,608,608,3)</li>
+  <li>The output is a list of bounding boxes along with recognized classes . Each bounding box is represented by 6 numbers (pc,bx,by,bh,bw,c) as shown below.</li>
+</ul>
+
+<div align="center">
+<img src="https://i.imgur.com/8CdVGU6.png" alt="" />
+</div>
+
+<p>We will use 5 anchor boxes. So you can think of the YOLO architecture as the following: IMAGE(m,608,608,3)-&gt;DEEP CNN-&gt;ENCODING(M,19,19,5,85).</p>
+
+<div align="center">
+<img src="https://i.imgur.com/tG8C2Yn.png" alt="" />
+</div>
+
+<p>If the center or mid point of an image falls into an grid cell. That grid cell is responsible for detecting that object.</p>
+
+<p>Since we are using 5 anchor boxes, each of the 19 x 19 cells this encodes information about of five boxes. Anchor boxes are defined only by their height and width. For simplicity, we will flatten the last two dimensions of the shape (19,19,5,85) encoding. So the output of the Depp CNN is (19,19,425).</p>
+
+<div align="center">
+<img src="https://i.imgur.com/2PnS4ol.png" alt="" />
+</div>
+
+<p>Now, for each box (of each cell) we will compute the following elementwise product and extract the probability that the box contains certain class.</p>
+
+<div align="center">
+<img src="https://i.imgur.com/Xb80Ju7.png" alt="" />
+</div>
+
+<p>If we visualize the YOLO output we can see an image similar to this:</p>
+
+<div align="center">
+<img src="https://i.imgur.com/TGdI2gw.png" alt="" />
+</div>
+
+<p>It is hard to visualize what exactly are the recognized objects from the above image. So we will carry out two steps to filter the boxes and leave only the important ones.</p>
+
+<ul>
+  <li>Get rid of boxes with low score</li>
+  <li>Select only one box when several boxes overlap with each other to detect the same object.</li>
+</ul>
+
+<h3>Filtering with a threshold</h3>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">yolo_filter_boxes</span><span class="p">(</span><span class="n">box_confidence</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">box_class_probs</span><span class="p">,</span> <span class="n">threshold</span> <span class="o">=</span> <span class="o">.</span><span class="mi">6</span><span class="p">):</span>
+    <span class="s">"""Filters YOLO boxes by thresholding on object and class confidence.
+
+    Arguments:
+    box_confidence -- tensor of shape (19, 19, 5, 1)
+    boxes -- tensor of shape (19, 19, 5, 4)
+    box_class_probs -- tensor of shape (19, 19, 5, 80)
+    threshold -- real value, if [ highest class probability score &lt; threshold], then get rid of the corresponding box
+
+    Returns:
+    scores -- tensor of shape (None,), containing the class probability score for selected boxes
+    boxes -- tensor of shape (None, 4), containing (b_x, b_y, b_h, b_w) coordinates of selected boxes
+    classes -- tensor of shape (None,), containing the index of the class detected by the selected boxes
+
+    Note: "None" is here because you don't know the exact number of selected boxes, as it depends on the threshold.
+    For example, the actual output size of scores would be (10,) if there are 10 boxes.
+    """</span>
+
+    <span class="c"># Step 1: Compute box scores</span>
+    <span class="n">box_scores</span> <span class="o">=</span> <span class="n">box_confidence</span> <span class="o">*</span> <span class="n">box_class_probs</span>
+
+    <span class="c"># Step 2: Find the box_classes thanks to the max box_scores, keep track of the corresponding score</span>
+    <span class="n">box_classes</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">box_scores</span><span class="p">,</span><span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">box_class_scores</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="nb">max</span><span class="p">(</span><span class="n">box_scores</span><span class="p">,</span><span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c"># Step 3: Create a filtering mask based on "box_class_scores" by using "threshold". The mask should have the</span>
+    <span class="c"># same dimension as box_class_scores, and be True for the boxes you want to keep (with probability &gt;= threshold)</span>
+
+    <span class="n">filtering_mask</span> <span class="o">=</span> <span class="n">box_class_scores</span> <span class="o">&gt;=</span> <span class="n">threshold</span>
+
+    <span class="c"># Step 4: Apply the mask to scores, boxes and classes</span>
+    <span class="n">scores</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">boolean_mask</span><span class="p">(</span><span class="n">box_class_scores</span><span class="p">,</span><span class="n">filtering_mask</span><span class="p">)</span>
+    <span class="n">boxes</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">boolean_mask</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span><span class="n">filtering_mask</span><span class="p">)</span>
+    <span class="n">classes</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">boolean_mask</span><span class="p">(</span><span class="n">box_classes</span><span class="p">,</span><span class="n">filtering_mask</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">scores</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">classes</span>
+</code></pre></div></div>
+<h3>Non-max suppression</h3>
+
+<p>The key steps of NMS are:</p>
+
+<ul>
+  <li>Select the box that has the highest score.</li>
+  <li>Compute its overlap with all other boxes, and remove boxes that overlap it more than iou_threshold.</li>
+  <li>Go back to step 1 and iterate until there’s no more boxes with a lower score than the current selected box.</li>
+</ul>
+
+<p>This will remove all boxes that have a large overlap with the selected boxes. Only the “best” boxes remain.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">yolo_non_max_suppression</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">classes</span><span class="p">,</span> <span class="n">max_boxes</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">iou_threshold</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">):</span>
+    <span class="s">"""
+    Applies Non-max suppression (NMS) to set of boxes
+
+    Arguments:
+    scores -- tensor of shape (None,), output of yolo_filter_boxes()
+    boxes -- tensor of shape (None, 4), output of yolo_filter_boxes() that have been scaled to the image size (see later)
+    classes -- tensor of shape (None,), output of yolo_filter_boxes()
+    max_boxes -- integer, maximum number of predicted boxes you'd like
+    iou_threshold -- real value, "intersection over union" threshold used for NMS filtering
+
+    Returns:
+    scores -- tensor of shape (, None), predicted score for each box
+    boxes -- tensor of shape (4, None), predicted box coordinates
+    classes -- tensor of shape (, None), predicted class for each box
+
+    Note: The "None" dimension of the output tensors has obviously to be less than max_boxes. Note also that this
+    function will transpose the shapes of scores, boxes, classes. This is made for convenience.
+    """</span>
+
+    <span class="n">max_boxes_tensor</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">variable</span><span class="p">(</span><span class="n">max_boxes</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">'int32'</span><span class="p">)</span>     <span class="c"># tensor to be used in tf.image.non_max_suppression()</span>
+    <span class="n">K</span><span class="o">.</span><span class="n">get_session</span><span class="p">()</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">variables_initializer</span><span class="p">([</span><span class="n">max_boxes_tensor</span><span class="p">]))</span> <span class="c"># initialize variable max_boxes_tensor</span>
+
+    <span class="c"># Use tf.image.non_max_suppression() to get the list of indices corresponding to boxes you keep</span>
+
+    <span class="n">nms_indices</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">non_max_suppression</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span><span class="n">scores</span><span class="p">,</span><span class="n">max_boxes_tensor</span><span class="p">)</span>
+
+    <span class="c"># Use K.gather() to select only nms_indices from scores, boxes and classes</span>
+
+    <span class="n">scores</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span><span class="n">nms_indices</span><span class="p">)</span>
+    <span class="n">boxes</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span><span class="n">nms_indices</span><span class="p">)</span>
+    <span class="n">classes</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">classes</span><span class="p">,</span><span class="n">nms_indices</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">scores</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">classes</span>
+
+</code></pre></div></div>
+<p><strong>Combining the above two functions into single YOLO eval</strong></p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">yolo_eval</span><span class="p">(</span><span class="n">yolo_outputs</span><span class="p">,</span> <span class="n">image_shape</span> <span class="o">=</span> <span class="p">(</span><span class="mf">720.</span><span class="p">,</span> <span class="mf">1280.</span><span class="p">),</span> <span class="n">max_boxes</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">score_threshold</span><span class="o">=.</span><span class="mi">6</span><span class="p">,</span> <span class="n">iou_threshold</span><span class="o">=.</span><span class="mi">5</span><span class="p">):</span>
+    <span class="s">"""
+    Converts the output of YOLO encoding (a lot of boxes) to your predicted boxes along with their scores, box coordinates and classes.
+
+    Arguments:
+    yolo_outputs -- output of the encoding model (for image_shape of (608, 608, 3)), contains 4 tensors:
+                    box_confidence: tensor of shape (None, 19, 19, 5, 1)
+                    box_xy: tensor of shape (None, 19, 19, 5, 2)
+                    box_wh: tensor of shape (None, 19, 19, 5, 2)
+                    box_class_probs: tensor of shape (None, 19, 19, 5, 80)
+    image_shape -- tensor of shape (2,) containing the input shape, in this notebook we use (608., 608.) (has to be float32 dtype)
+    max_boxes -- integer, maximum number of predicted boxes you'd like
+    score_threshold -- real value, if [ highest class probability score &lt; threshold], then get rid of the corresponding box
+    iou_threshold -- real value, "intersection over union" threshold used for NMS filtering
+
+    Returns:
+    scores -- tensor of shape (None, ), predicted score for each box
+    boxes -- tensor of shape (None, 4), predicted box coordinates
+    classes -- tensor of shape (None,), predicted class for each box
+    """</span>
+
+
+    <span class="c"># Retrieve outputs of the YOLO model (≈1 line)</span>
+    <span class="n">box_confidence</span><span class="p">,</span> <span class="n">box_xy</span><span class="p">,</span> <span class="n">box_wh</span><span class="p">,</span> <span class="n">box_class_probs</span> <span class="o">=</span> <span class="n">yolo_outputs</span>
+
+    <span class="c"># Convert boxes to be ready for filtering functions</span>
+    <span class="n">boxes</span> <span class="o">=</span> <span class="n">yolo_boxes_to_corners</span><span class="p">(</span><span class="n">box_xy</span><span class="p">,</span> <span class="n">box_wh</span><span class="p">)</span>
+
+    <span class="c"># Use one of the functions you've implemented to perform Score-filtering with a threshold of score_threshold (≈1 line)</span>
+    <span class="n">scores</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">classes</span> <span class="o">=</span> <span class="n">yolo_filter_boxes</span><span class="p">(</span><span class="n">box_confidence</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">box_class_probs</span><span class="p">,</span> <span class="n">score_threshold</span><span class="p">)</span>
+
+    <span class="c"># Scale boxes back to original image shape.</span>
+    <span class="n">boxes</span> <span class="o">=</span> <span class="n">scale_boxes</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span> <span class="n">image_shape</span><span class="p">)</span>
+
+    <span class="c"># Use one of the functions you've implemented to perform Non-max suppression with a threshold of iou_threshold (≈1 line)</span>
+    <span class="n">scores</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">classes</span> <span class="o">=</span> <span class="n">yolo_non_max_suppression</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">classes</span><span class="p">,</span> <span class="n">max_boxes</span><span class="p">,</span> <span class="n">iou_threshold</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">scores</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">classes</span>
+
+</code></pre></div></div>
+
+<p>What we do is, we give an image as input to the pretrained model generate the encoding(no processing of boxes) and pass the encoding into YOLO_eval to generate recognized objects along with their bounding boxes(After thresholding and NMS).</p>
+
+<p><strong>What you should remember:</strong></p>
+
+<ul>
+  <li>YOLO is a state-of-the-art object detection model that is fast and accurate</li>
+  <li>It runs an input image through a CNN which outputs a 19x19x5x85 dimensional volume.</li>
+  <li>The encoding can be seen as a grid where each of the 19x19 cells contains information about 5 boxes.</li>
+  <li>You filter through all the boxes using non-max suppression. Specifically:
+    <ul>
+      <li>Score thresholding on the probability of detecting a class to keep only accurate (high probability) boxes</li>
+      <li>Intersection over Union (IoU) thresholding to eliminate overlapping boxes</li>
+    </ul>
+  </li>
+  <li>Because training a YOLO model from randomly initialized weights is non-trivial and requires a large dataset as well as lot of computation, we used previously trained model parameters in this exercise. If you wish, you can also try fine-tuning the YOLO model with your own dataset, though this would be a fairly non-trivial exercise.</li>
+</ul>
+
+
+</div>
+
+<div class="pagination">
+  
+  
+    <a href="/2018-03-30/Understanding-LSTM-Networks" class="right arrow">&#8594;</a>
+  
+
+  <a href="#" class="top">Top</a>
+</div>
+
+    </main>
+
+    <footer>
+      <span>
+        &copy; <time datetime="2018-04-01 13:38:06 -0500">2018</time> SaratM. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+      </span>
+    </footer>
+  </body>
+</html>

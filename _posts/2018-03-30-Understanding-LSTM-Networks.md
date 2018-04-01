@@ -29,9 +29,15 @@ The first sigmoid layer outputs numbers between 0 and 1, describing how much of 
 for example, if we would like to forget the gender of the old subject and update to new gender of another subject. The first sigmoid layer looks at "previous cell activation" and "input at the current time step" and outputs a value between 0 and 1.
 
 <div align="center">
-<img src="https://i.imgur.com/59Br1vk.png" alt="">
+<img src="https://i.imgur.com/Ooxr3Ql.png" alt="">
 <strong>Update Gate</strong>
 </div><br />
+
+<div align="center">
+<img src="https://i.imgur.com/59Br1vk.png" alt="">
+<strong>Updating candidate values</strong>
+</div><br />
+
 
  In order to update it involves two steps: first a sigmoid layer called input gate layer decides which values we will update and next "tanh" layer creates vector of candidate values that could be added to state. In next step, we will combine these two and create and update to the state.
 

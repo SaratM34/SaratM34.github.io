@@ -5,5 +5,5 @@ author: "Sarat"
 permalink: /resume/
 ---
 
-[Resume](https://drive.google.com/file/d/1j8JocIXn9f_HNRFyXFi54BYrAHkFGh-A/view?usp=sharing)
+[Resume](https://drive.google.com/file/d/1uj6Tay5kPgIcP4ISTTkE3N0g9xYlC1P8/view?usp=sharing)
 
